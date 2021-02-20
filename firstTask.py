@@ -1,47 +1,94 @@
-import math
-import tkinter as tk
-from tkinter import Canvas, Tk
+from PyQt5.QtWidgets import QWidget, QApplication
+from PyQt5.QtGui import QPainter, QPen, QBrush, QFont, QPainterPath
+from PyQt5.QtCore import Qt, QPoint, QRect
+import sys
 
 
-class App(Tk):
-    def __init__(self, master=None, **kw):
-        super().__init__(master, **kw)
-        self.canvas = Canvas(self, borderwidth=0, highlightthickness=0)
-        self.canvas.pack(fill=tk.BOTH, expand=tk.YES)
+class FirstTask(QWidget):
+    def __init__(self, function):
+        super().__init__()
 
-    def plot(self, x, y):
-        self.canvas.create_line(960 + x, 540 - y, 961 + x, 540 - y, fill="black")
+        self.start = -20
+        self.end = 20
+        self.function = function
 
-    def plot_all(self, x, y, b, c):
-        self.plot(x, y)
-        self.plot(y - c - b, x + b + c)
-        self.plot(- 2*b - x, 2*c - y)
-        self.plot(c - y - b, - x - b + c)
+        self.function_upper_bound = 1000
+        self.function_lower_bound = -1000
 
-    def draw_hyperbola_slow(self, a, b, c):
-        y = int(math.sqrt(a))
-        for x in range(y, 10000):
-            self.plot_all(x, y, b, c)
-            delta = 2*x*y - 2*x*c + 2*y - 2*c + 2*b*y - 2*b*c - b - 1 - x - 2*a
-            if delta > 0:
-                y -= 1
+        self.init_ui()
 
-    def draw_hyperbola_fast(self, a, b, c):
-        x0 = int(math.sqrt(a)) - b
-        y = int(math.sqrt(a)) + c
-        delta = -math.sqrt(a)
-        for x in range(int(x0), int(x0) + 1920):
-            self.plot_all(x, y, b, c)
-            if delta > 0:
-                y -= 1
-                delta += 2*y - 2*x - 2*c - 2*b - 5
-            else:
-                delta += 2*y - 2*c - 1
+    def init_ui(self):
+        self.setGeometry(100, 100, 1000, 600)
+        self.setWindowTitle('First task')
+        p = self.palette()
+        p.setColor(self.backgroundRole(), Qt.white)
+        self.setPalette(p)
+        self.show()
+
+    def paintEvent(self, e):
+        qp = QPainter()
+        qp.begin(self)
+        self.find_function_min_and_max()
+        self.draw_axes(qp)
+        self.draw_function(qp)
+        qp.end()
+
+    def cartesian_to_screen(self, x, y):
+        return round((x - self.start) * self.geometry().width() / (self.end - self.start)), \
+               round((y - self.ymax) * self.geometry().height() / (self.ymin - self.ymax))
+
+    def screen_to_cartesian(self, xx, yy):
+        return xx * (self.end - self.start) / self.geometry().width() + self.start, \
+               yy * (self.ymin - self.ymax) / self.geometry().height() + self.ymax
+
+    def draw_function(self, qp):
+        qp.setPen(QPen(Qt.blue, 1, Qt.SolidLine))
+        path = QPainterPath(QPoint(*self.cartesian_to_screen(self.start, self.function(self.start))))
+        for xx in range(1, self.geometry().width()):
+            x, _ = self.screen_to_cartesian(xx, 0)
+            _, yy = self.cartesian_to_screen(0, self.function(x))
+            path.lineTo(QPoint(xx, yy))
+            path.moveTo(QPoint(xx, yy))
+        qp.drawPath(path)
+
+    def find_function_min_and_max(self):
+        ymin = ymax = self.function(self.start)
+        for xx in range(self.geometry().width()):
+            x = xx * (self.end - self.start) / self.geometry().width() + self.start
+            y = self.function(x)
+            ymin = min(ymin, y)
+            ymax = max(ymax, y)
+        self.ymin = max(self.function_lower_bound, round(ymin))
+        self.ymax = min(self.function_upper_bound, round(ymax))
+
+    def draw_axes(self, qp):
+        qp.setPen(QPen(Qt.black, 1, Qt.SolidLine))
+        xx0, yy0 = self.cartesian_to_screen(0, 0)
+        qp.drawLine(xx0, 0, xx0, self.geometry().height())
+        qp.drawLine(0, yy0, self.geometry().width(), yy0)
+        self.draw_axes_notches(qp)
+
+    def draw_axes_notches(self, qp):
+        qp.setBrush(QBrush(Qt.SolidPattern))
+        qp.setFont(QFont('Decorative', 7))
+        step = max(1, round(self.screen_to_cartesian(32, 0)[0] - self.screen_to_cartesian(0, 0)[0]))
+        for x in range(step, max(abs(self.start), abs(self.end)), step):
+            xx_right, yy = self.cartesian_to_screen(x, 0)
+            xx_left, yy = self.cartesian_to_screen(-x, 0)
+            qp.drawLine(xx_right, yy - 2, xx_right, yy + 2)
+            qp.drawLine(xx_left, yy - 2, xx_left, yy + 2)
+            qp.drawText(QRect(xx_right - 10, yy + 10, 20, 20), Qt.AlignCenter, str(x))
+            qp.drawText(QRect(xx_left - 10, yy + 10, 20, 20), Qt.AlignCenter, str(-x))
+
+
+def foo(x):
+    # return math.sin(x) * x ** 2
+    return x**2
+    # return x**3
 
 
 if __name__ == '__main__':
-    app = App()
-    app.canvas.create_line(960, 0, 960, 1080, fill="red")
-    app.canvas.create_line(0, 540, 1920, 540, fill="red")
-    app.draw_hyperbola_fast(10000, 200, 200)
-    app.mainloop()
+    app = QApplication(sys.argv)
+    ex = FirstTask(foo)
+    sys.exit(app.exec_())
+
